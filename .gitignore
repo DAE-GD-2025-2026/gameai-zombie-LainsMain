@@ -801,3 +801,6 @@ FodyWeavers.xsd
 # Ignoring diversion related files
 .dvignore
 /.diversion
+
+# Ignore workspace documentation files
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
