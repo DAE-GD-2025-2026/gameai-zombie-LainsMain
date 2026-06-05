@@ -26,41 +26,71 @@ EBTNodeResult::Type UBTTask_AttackZombieVerschuerenLain::ExecuteTask(UBehaviorTr
 	UInventoryComponent* InvComp = Survivor->GetComponentByClass<UInventoryComponent>();
 	if (!InvComp) return EBTNodeResult::Failed;
 
-	// find weapon in inventory
-	int WeaponSlot = -1;
+	// determine best weapon based on distance
+	float DistToZombie = FVector::Dist(Survivor->GetActorLocation(), ZombieActor->GetActorLocation());
+
+	int ShotgunSlot = -1;
+	int PistolSlot = -1;
+
 	const TArray<ABaseItem*>& Inv = InvComp->GetInventory();
 	for (int s = 0; s < Inv.Num(); ++s)
 	{
-		if (Inv[s])
+		if (Inv[s] && Inv[s]->GetValue() > 0)
 		{
 			EItemType Type = Inv[s]->GetItemType();
-			if ((Type == EItemType::Pistol || Type == EItemType::Shotgun) && Inv[s]->GetValue() > 0)
+			if (Type == EItemType::Shotgun)
 			{
-				WeaponSlot = s;
-				break;
+				ShotgunSlot = s;
+			}
+			else if (Type == EItemType::Pistol)
+			{
+				PistolSlot = s;
 			}
 		}
 	}
 
+	int WeaponSlot = -1;
+	if (DistToZombie <= 600.f)
+	{
+		WeaponSlot = (ShotgunSlot != -1) ? ShotgunSlot : PistolSlot;
+	}
+	else
+	{
+		WeaponSlot = (PistolSlot != -1) ? PistolSlot : ShotgunSlot;
+	}
+
 	if (WeaponSlot != -1)
 	{
-		// rotate to face zombie
-		FVector Dir = (ZombieActor->GetActorLocation() - Survivor->GetActorLocation()).GetSafeNormal2D();
-		if (!Dir.IsNearlyZero())
-		{
-			FRotator Rot = Dir.Rotation();
-			Survivor->SetActorRotation(Rot);
-			Controller->SetControlRotation(Rot);
-		}
+		// smooth rotate to face zombie using AI focus
+		Controller->SetFocus(ZombieActor);
 
-		// shoot
-		if (InvComp->UseItem(WeaponSlot))
+		// Line of sight check to save ammo
+		FHitResult HitResult;
+		FCollisionQueryParams TraceParams;
+		TraceParams.AddIgnoredActor(Survivor);
+		TraceParams.AddIgnoredActor(ZombieActor);
+
+		FVector StartTrace = Survivor->GetActorLocation() + FVector(0.f, 0.f, 50.f);
+		FVector EndTrace = ZombieActor->GetActorLocation() + FVector(0.f, 0.f, 50.f);
+
+		bool bHasLOS = !GetWorld()->LineTraceSingleByChannel(HitResult, StartTrace, EndTrace, ECC_Visibility, TraceParams);
+		if (bHasLOS)
 		{
-			// remove weapon if out of ammo
-			if (Inv[WeaponSlot]->GetValue() <= 0)
+			// shoot
+			if (InvComp->UseItem(WeaponSlot))
 			{
-				InvComp->RemoveItem(WeaponSlot);
+				// remove weapon if out of ammo
+				if (Inv[WeaponSlot]->GetValue() <= 0)
+				{
+					InvComp->RemoveItem(WeaponSlot);
+					Controller->ClearFocus(EAIFocusPriority::Gameplay);
+				}
+				return EBTNodeResult::Succeeded;
 			}
+		}
+		else
+		{
+			// Face the zombie but don't shoot if out of sight
 			return EBTNodeResult::Succeeded;
 		}
 	}

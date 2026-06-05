@@ -82,5 +82,6 @@ void UBTService_UpdateSensorDataVerschuerenLain::TickNode(UBehaviorTreeComponent
 	else
 	{
 		BlackboardComp->ClearValue(TargetZombieKey.SelectedKeyName);
+		Controller->ClearFocus(EAIFocusPriority::Gameplay);
 	}
 }
