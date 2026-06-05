@@ -20,6 +20,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Blackboard")
 	FBlackboardKeySelector TargetLocationKey;
 
+	UPROPERTY(EditAnywhere, Category = "Blackboard")
+	FBlackboardKeySelector ExploringHouseKey;
+
 	// how far to search for random point
 	UPROPERTY(EditAnywhere, Category = "Search")
 	float SearchRadius{1500.f};

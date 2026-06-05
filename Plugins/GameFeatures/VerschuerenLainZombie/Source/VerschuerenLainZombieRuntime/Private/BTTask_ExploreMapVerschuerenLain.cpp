@@ -1,4 +1,7 @@
 #include "BTTask_ExploreMapVerschuerenLain.h"
+#include "ZombieSurvMemoryComponentVerschuerenLain.h"
+#include "Village/House/House.h"
+#include "Survivor/SurvivorPawn.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AIController.h"
 #include "GameFramework/Pawn.h"
@@ -11,55 +14,77 @@ UBTTask_ExploreMapVerschuerenLain::UBTTask_ExploreMapVerschuerenLain()
 
 EBTNodeResult::Type UBTTask_ExploreMapVerschuerenLain::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("explore task: ExecuteTask called!"));
-	
 	AAIController* Controller = OwnerComp.GetAIOwner();
 	UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
 	
 	if (!Controller || !BlackboardComp)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("explore task: no controller or blackboard"));
 		return EBTNodeResult::Failed;
 	}
 
 	APawn* Pawn = Controller->GetPawn();
 	if (!Pawn)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("explore task: no possessed pawn"));
+		return EBTNodeResult::Failed;
+	}
+
+	UZombieSurvMemoryComponentVerschuerenLain* MemoryComp = Pawn->GetComponentByClass<UZombieSurvMemoryComponentVerschuerenLain>();
+	if (!MemoryComp)
+	{
 		return EBTNodeResult::Failed;
 	}
 
 	FVector Origin = Pawn->GetActorLocation();
 	FVector TargetLocation = Origin;
 	bool bFoundPoint = false;
+	bool bIsHouse = false;
 
-	UWorld* World = OwnerComp.GetWorld();
-	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+	// try to find unexplored house first
+	AHouse* House = nullptr;
+	if (MemoryComp->GetNextUnexploredHouse(Origin, TargetLocation, House))
 	{
-		FNavLocation NavLoc;
-		if (NavSys->GetRandomReachablePointInRadius(Origin, SearchRadius, NavLoc))
-		{
-			TargetLocation = NavLoc.Location;
-			bFoundPoint = true;
-		}
+		bFoundPoint = true;
+		bIsHouse = true;
 	}
 	else
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("explore task: nav system not found"));
+		// wander in a direction if all houses explored
+		UWorld* World = OwnerComp.GetWorld();
+		if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+		{
+			FNavLocation NavLoc;
+			FVector Direction = Pawn->GetActorForwardVector();
+			FVector WanderOrigin = Origin + Direction * SearchRadius;
+			if (NavSys->GetRandomReachablePointInRadius(WanderOrigin, SearchRadius * 0.5f, NavLoc))
+			{
+				TargetLocation = NavLoc.Location;
+				bFoundPoint = true;
+			}
+			else if (NavSys->GetRandomReachablePointInRadius(Origin, SearchRadius, NavLoc))
+			{
+				TargetLocation = NavLoc.Location;
+				bFoundPoint = true;
+			}
+		}
 	}
 
 	if (bFoundPoint)
 	{
-		FString DebugMsg = FString::Printf(TEXT("explore task: going to %s (key: %s)"), 
-			*TargetLocation.ToString(), *TargetLocationKey.SelectedKeyName.ToString());
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, DebugMsg);
-	}
-	else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, TEXT("explore task: failed to find random nav point"));
+		Controller->ClearFocus(EAIFocusPriority::Gameplay);
+		BlackboardComp->SetValueAsVector(TargetLocationKey.SelectedKeyName, TargetLocation);
+		if (bIsHouse)
+		{
+			BlackboardComp->SetValueAsBool(ExploringHouseKey.SelectedKeyName, true);
+		}
+
+		// stop running to save stamina
+		if (ASurvivorPawn* Survivor = Cast<ASurvivorPawn>(Pawn))
+		{
+			Survivor->StopRunning();
+		}
+		
+		return EBTNodeResult::Succeeded;
 	}
 
-	BlackboardComp->SetValueAsVector(TargetLocationKey.SelectedKeyName, TargetLocation);
-
-	return EBTNodeResult::Succeeded;
+	return EBTNodeResult::Failed;
 }
