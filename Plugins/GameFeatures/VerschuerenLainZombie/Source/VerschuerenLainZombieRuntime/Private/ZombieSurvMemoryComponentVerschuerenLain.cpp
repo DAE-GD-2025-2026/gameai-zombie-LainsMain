@@ -1,6 +1,9 @@
 #include "ZombieSurvMemoryComponentVerschuerenLain.h"
 #include "Items/BaseItem.h"
+#include "Zombies/BaseZombie.h"
 #include "Common/InventoryComponent.h"
+#include "Common/HealthComponent.h"
+#include "Common/StaminaComponent.h"
 #include "GameFramework/Pawn.h"
 
 UZombieSurvMemoryComponentVerschuerenLain::UZombieSurvMemoryComponentVerschuerenLain()
@@ -45,7 +48,7 @@ void UZombieSurvMemoryComponentVerschuerenLain::RemoveItem(ABaseItem* Item)
 
 bool UZombieSurvMemoryComponentVerschuerenLain::FindClosestItem(const FVector& Origin, EItemType Type, FVector& OutLocation, ABaseItem*& OutItem)
 {
-	float MinDist = MAX_FLT;
+	float MinDist = FLT_MAX;
 	bool bFound = false;
 
 	for (const auto& Known : KnownItems)
@@ -68,6 +71,40 @@ bool UZombieSurvMemoryComponentVerschuerenLain::FindClosestItem(const FVector& O
 	return bFound;
 }
 
+void UZombieSurvMemoryComponentVerschuerenLain::AddZombie(ABaseZombie* Zombie)
+{
+	if (Zombie && !KnownZombies.Contains(Zombie))
+	{
+		KnownZombies.Add(Zombie);
+	}
+}
+
+void UZombieSurvMemoryComponentVerschuerenLain::RemoveZombie(ABaseZombie* Zombie)
+{
+	KnownZombies.Remove(Zombie);
+}
+
+bool UZombieSurvMemoryComponentVerschuerenLain::FindClosestZombie(const FVector& Origin, ABaseZombie*& OutZombie)
+{
+	float MinDist = FLT_MAX;
+	bool bFound = false;
+
+	for (ABaseZombie* Zombie : KnownZombies)
+	{
+		if (!IsValid(Zombie)) continue;
+
+		float Dist = FVector::Dist(Origin, Zombie->GetActorLocation());
+		if (Dist < MinDist)
+		{
+			MinDist = Dist;
+			OutZombie = Zombie;
+			bFound = true;
+		}
+	}
+
+	return bFound;
+}
+
 void UZombieSurvMemoryComponentVerschuerenLain::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -77,6 +114,15 @@ void UZombieSurvMemoryComponentVerschuerenLain::TickComponent(float DeltaTime, E
 
 	UInventoryComponent* InvComp = PawnOwner->GetComponentByClass<UInventoryComponent>();
 	FVector PawnLoc = PawnOwner->GetActorLocation();
+
+	// clean up dead zombie references
+	for (int i = KnownZombies.Num() - 1; i >= 0; --i)
+	{
+		if (!IsValid(KnownZombies[i]))
+		{
+			KnownZombies.RemoveAt(i);
+		}
+	}
 
 	// grab nearby known items
 	for (int i = KnownItems.Num() - 1; i >= 0; --i)
@@ -103,6 +149,53 @@ void UZombieSurvMemoryComponentVerschuerenLain::TickComponent(float DeltaTime, E
 					{
 						EmptySlot = s;
 						break;
+					}
+				}
+
+				// if inventory is full, try to use food/medkit to free slot
+				if (EmptySlot == -1)
+				{
+					UHealthComponent* HealthComp = PawnOwner->GetComponentByClass<UHealthComponent>();
+					UStaminaComponent* StaminaComp = PawnOwner->GetComponentByClass<UStaminaComponent>();
+
+					int MedkitSlot = -1;
+					int FoodSlot = -1;
+					for (int s = 0; s < Inv.Num(); ++s)
+					{
+						if (Inv[s])
+						{
+							if (Inv[s]->GetItemType() == EItemType::Medkit) MedkitSlot = s;
+							else if (Inv[s]->GetItemType() == EItemType::Food) FoodSlot = s;
+						}
+					}
+
+					// 1. health is low, use medkit
+					if (HealthComp && HealthComp->GetHealth() < HealthComp->GetMaxHealth() && MedkitSlot != -1)
+					{
+						InvComp->UseItem(MedkitSlot);
+						InvComp->RemoveItem(MedkitSlot);
+						EmptySlot = MedkitSlot;
+					}
+					// 2. stamina is low, use food
+					else if (StaminaComp && StaminaComp->GetCurrentStamina() < StaminaComp->GetMaxStamina() && FoodSlot != -1)
+					{
+						InvComp->UseItem(FoodSlot);
+						InvComp->RemoveItem(FoodSlot);
+						EmptySlot = FoodSlot;
+					}
+					// 3. still full, consume food anyway to free space
+					else if (FoodSlot != -1)
+					{
+						InvComp->UseItem(FoodSlot);
+						InvComp->RemoveItem(FoodSlot);
+						EmptySlot = FoodSlot;
+					}
+					// 4. consume medkit anyway
+					else if (MedkitSlot != -1)
+					{
+						InvComp->UseItem(MedkitSlot);
+						InvComp->RemoveItem(MedkitSlot);
+						EmptySlot = MedkitSlot;
 					}
 				}
 

@@ -6,6 +6,7 @@
 #include "ZombieSurvMemoryComponentVerschuerenLain.generated.h"
 
 class ABaseItem;
+class ABaseZombie;
 
 USTRUCT(BlueprintType)
 struct FMemoryItemVerschuerenLain
@@ -45,9 +46,21 @@ public:
 	// find closest item of type
 	bool FindClosestItem(const FVector& Origin, EItemType Type, FVector& OutLocation, ABaseItem*& OutItem);
 
+	// add zombie
+	void AddZombie(ABaseZombie* Zombie);
+
+	// remove zombie
+	void RemoveZombie(ABaseZombie* Zombie);
+
+	// find closest zombie
+	bool FindClosestZombie(const FVector& Origin, ABaseZombie*& OutZombie);
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
 	UPROPERTY()
 	TArray<FMemoryItemVerschuerenLain> KnownItems;
+
+	UPROPERTY()
+	TArray<ABaseZombie*> KnownZombies;
 };

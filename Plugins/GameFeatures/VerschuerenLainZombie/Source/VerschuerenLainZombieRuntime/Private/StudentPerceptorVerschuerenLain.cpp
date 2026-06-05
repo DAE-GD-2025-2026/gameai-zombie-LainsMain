@@ -72,6 +72,18 @@ void UStudentPerceptorVerschuerenLain::OnPerceptionUpdated(AActor* Actor, FAISti
 				*Zombie->GetActorLocation().ToString());
 
 			GEngine->AddOnScreenDebugMessage(-1, 5.f, bSensed ? FColor::Red : FColor::Orange, Msg);
+
+			if (auto MemoryComp = GetOwner()->GetComponentByClass<UZombieSurvMemoryComponentVerschuerenLain>())
+			{
+				if (bSensed)
+				{
+					MemoryComp->AddZombie(Zombie);
+				}
+				else
+				{
+					MemoryComp->RemoveZombie(Zombie);
+				}
+			}
 		}
 	}
 	else if (bIsDamage)
