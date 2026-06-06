@@ -23,4 +23,7 @@ public:
 
 	UFUNCTION()
 	virtual void OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
+
+	UPROPERTY(EditAnywhere, Category = "Perception")
+	FName Needs360ScanKeyName{TEXT("Needs360Scan")};
 };

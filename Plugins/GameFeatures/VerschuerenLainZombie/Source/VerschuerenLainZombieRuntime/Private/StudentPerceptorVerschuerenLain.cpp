@@ -5,10 +5,13 @@
 #include "Perception/AISense_Sight.h"
 #include "Perception/AISense_Damage.h"
 #include "ZombieSurvMemoryComponentVerschuerenLain.h"
+#include "AIController.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "GameFramework/Pawn.h"
 
 UStudentPerceptorVerschuerenLain::UStudentPerceptorVerschuerenLain()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UStudentPerceptorVerschuerenLain::BeginPlay()
@@ -28,7 +31,6 @@ void UStudentPerceptorVerschuerenLain::OnPerceptionUpdated(AActor* Actor, FAISti
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// check what sense triggered this
 	auto SenseClass = UAIPerceptionSystem::GetSenseClassForStimulus(World, Stimulus);
 	bool bIsSight = (SenseClass == UAISense_Sight::StaticClass());
 	bool bIsDamage = (SenseClass == UAISense_Damage::StaticClass());
@@ -37,25 +39,8 @@ void UStudentPerceptorVerschuerenLain::OnPerceptionUpdated(AActor* Actor, FAISti
 
 	if (bIsSight)
 	{
-		// check if item
 		if (ABaseItem* Item = Cast<ABaseItem>(Actor))
 		{
-			FString TypeStr = TEXT("Garbage");
-			switch (Item->GetItemType())
-			{
-			case EItemType::Food: TypeStr = TEXT("Food"); break;
-			case EItemType::Medkit: TypeStr = TEXT("Medkit"); break;
-			case EItemType::Shotgun: TypeStr = TEXT("Shotgun"); break;
-			case EItemType::Pistol: TypeStr = TEXT("Pistol"); break;
-			default: break;
-			}
-
-			FString Msg = FString::Printf(TEXT("sight: %s item %s (val: %d) at %s"),
-				bSensed ? TEXT("saw") : TEXT("lost"),
-				*TypeStr, Item->GetValue(), *Item->GetActorLocation().ToString());
-
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, bSensed ? FColor::Green : FColor::Orange, Msg);
-
 			if (bSensed)
 			{
 				if (auto MemoryComp = GetOwner()->GetComponentByClass<UZombieSurvMemoryComponentVerschuerenLain>())
@@ -64,15 +49,8 @@ void UStudentPerceptorVerschuerenLain::OnPerceptionUpdated(AActor* Actor, FAISti
 				}
 			}
 		}
-		// check if zombie
 		else if (ABaseZombie* Zombie = Cast<ABaseZombie>(Actor))
 		{
-			FString Msg = FString::Printf(TEXT("sight: %s zombie at %s"),
-				bSensed ? TEXT("saw") : TEXT("lost"),
-				*Zombie->GetActorLocation().ToString());
-
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, bSensed ? FColor::Red : FColor::Orange, Msg);
-
 			if (auto MemoryComp = GetOwner()->GetComponentByClass<UZombieSurvMemoryComponentVerschuerenLain>())
 			{
 				if (bSensed)
@@ -88,9 +66,24 @@ void UStudentPerceptorVerschuerenLain::OnPerceptionUpdated(AActor* Actor, FAISti
 	}
 	else if (bIsDamage)
 	{
-		// hit by zombie
-		FString Msg = FString::Printf(TEXT("damage: took %f damage from %s"),
-			Stimulus.Strength, *Actor->GetName());
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, Msg);
+		if (auto MemoryComp = GetOwner()->GetComponentByClass<UZombieSurvMemoryComponentVerschuerenLain>())
+		{
+			ABaseZombie* ClosestZombie = nullptr;
+			bool bHasZombie = MemoryComp->FindClosestZombie(GetOwner()->GetActorLocation(), ClosestZombie);
+			if (!bHasZombie)
+			{
+				APawn* Pawn = Cast<APawn>(GetOwner());
+				if (Pawn)
+				{
+					if (auto Controller = Pawn->GetController<AAIController>())
+					{
+						if (auto BlackboardComp = Controller->GetBlackboardComponent())
+						{
+							BlackboardComp->SetValueAsBool(Needs360ScanKeyName, true);
+						}
+					}
+				}
+			}
+		}
 	}
 }

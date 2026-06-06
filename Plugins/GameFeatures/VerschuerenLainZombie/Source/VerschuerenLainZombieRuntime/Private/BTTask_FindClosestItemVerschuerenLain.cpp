@@ -22,6 +22,8 @@ EBTNodeResult::Type UBTTask_FindClosestItemVerschuerenLain::ExecuteTask(UBehavio
 		return EBTNodeResult::Failed;
 	}
 
+	Controller->ClearFocus(EAIFocusPriority::Gameplay);
+
 	APawn* Pawn = Controller->GetPawn();
 	if (!Pawn)
 	{
